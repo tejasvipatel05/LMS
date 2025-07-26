@@ -1,0 +1,183 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String         @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  email           String         @unique
+  password        String
+  role            Role           @default(STUDENT)
+  branch          String
+  createdAt       DateTime       @default(now())
+
+  borrowings      Borrowing[]
+  reservations    Reservation[]
+  fines           Fine[]
+  reviews         Review[]
+  notifications   Notification[]
+  readingStats    ReadingChallenge?
+
+  interLibraryRequests InterLibraryRequest[] @relation("UserInterLibraryRequests")
+}
+
+enum Role {
+  ADMIN
+  LIBRARIAN
+  STUDENT
+}
+
+model Item {
+  id              String     @id @default(auto()) @map("_id") @db.ObjectId
+  title           String
+  type            ItemType
+  author          String?
+  publisher       String?
+  isbn            String?    @unique
+  description     String?
+  coverImage      String?
+  price           Float
+  category        String?
+  tags            String[]   // For recommendations
+  createdAt       DateTime   @default(now())
+
+  copies          ItemCopy[]
+  reviews         Review[]
+}
+
+enum ItemType {
+  BOOK
+  JOURNAL
+  MULTIMEDIA
+}
+
+model ItemCopy {
+  id              String      @id @default(auto()) @map("_id") @db.ObjectId
+  itemId          String      @db.ObjectId
+  branch          String
+  status          CopyStatus  @default(AVAILABLE)
+  location        String  
+
+  item            Item        @relation(fields: [itemId], references: [id])
+  borrowings      Borrowing[]
+  reservations    Reservation[]
+}
+
+enum CopyStatus {
+  AVAILABLE
+  BORROWED
+  RESERVED
+  LOST
+  DAMAGED
+  UNDER_REPAIR
+}
+
+model Borrowing {
+  id              String     @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String     @db.ObjectId
+  itemCopyId      String     @db.ObjectId
+  borrowedAt      DateTime   @default(now())
+  dueDate         DateTime
+  returnedAt      DateTime?
+  autoExtended    Boolean    @default(false)
+
+  user            User       @relation(fields: [userId], references: [id])
+  itemCopy        ItemCopy   @relation(fields: [itemCopyId], references: [id])
+  fine            Fine?
+}
+
+model Reservation {
+  id              String             @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String             @db.ObjectId
+  itemCopyId      String             @db.ObjectId
+  reservedAt      DateTime           @default(now())
+  status          ReservationStatus  @default(PENDING)
+
+  user            User               @relation(fields: [userId], references: [id])
+  itemCopy        ItemCopy           @relation(fields: [itemCopyId], references: [id])
+}
+
+enum ReservationStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+model Fine {
+  id              String     @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String     @db.ObjectId
+  borrowingId     String     @unique @db.ObjectId
+  amount          Float
+  reason          String?
+  paid            Boolean    @default(false)
+  issuedAt        DateTime   @default(now())
+
+  user            User       @relation(fields: [userId], references: [id])
+  borrowing       Borrowing  @relation(fields: [borrowingId], references: [id])
+}
+
+model Notification {
+  id              String     @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String     @db.ObjectId
+  message         String
+  read            Boolean    @default(false)
+  createdAt       DateTime   @default(now())
+
+  user            User       @relation(fields: [userId], references: [id])
+}
+
+model Review {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String   @db.ObjectId
+  itemId          String   @db.ObjectId
+  rating          Int      // 1 to 5
+  comment         String?
+  createdAt       DateTime @default(now())
+
+  user            User     @relation(fields: [userId], references: [id])
+  item            Item     @relation(fields: [itemId], references: [id])
+}
+
+model ReadingChallenge {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String   @unique @db.ObjectId
+  year            Int
+  booksRead       Int      @default(0)
+  points          Int      @default(0)
+
+  user            User     @relation(fields: [userId], references: [id])
+}
+
+model RoleConfig {
+  id                  String   @id @default(auto()) @map("_id") @db.ObjectId
+  role                Role     @unique
+  borrowLimit         Int
+  borrowDurationDays  Int
+  seasonalOverride    Boolean  @default(false)
+}
+
+model InterLibraryRequest {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  requesterId     String   @db.ObjectId
+  sourceBranch    String
+  targetBranch    String
+  itemTitle       String
+  status          InterLibraryStatus @default(PENDING)
+  createdAt       DateTime @default(now())
+
+  requester       User     @relation("UserInterLibraryRequests", fields: [requesterId], references: [id])
+}
+
+enum InterLibraryStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+}
