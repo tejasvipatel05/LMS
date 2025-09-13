@@ -87,14 +87,18 @@ model Fine {
   borrowing Borrowing @relation(fields: [borrowingId], references: [id])
 }
 
-// Reservation model - for holding books
+// Reservation model - for borrow requests and holding books
 model Reservation {
   id         String   @id @default(auto()) @map("_id") @db.ObjectId
   bookId     String   @db.ObjectId
   userId     String   @db.ObjectId
   reservedAt DateTime @default(now())
   expiresAt  DateTime
-  isActive   Boolean  @default(true)
+  status     String   @default("PENDING") // PENDING, APPROVED, REJECTED, FULFILLED, EXPIRED
+  type       String   @default("REQUEST") // REQUEST, HOLD
+  notes      String?
+  approvedBy String?  @db.ObjectId
+  approvedAt DateTime?
   
   // Relations
   book Book @relation(fields: [bookId], references: [id])

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { borrowBook, returnBook, getActiveBorrowings } from '@/lib/db-helpers'
 import { getUserFromRequest } from '@/middleware/auth'
+import { prisma } from '@/lib/database'
 
-// Get all active borrowings (for librarians/admins)
+// Get all borrowings (for librarians/admins)
 export async function GET(req: NextRequest) {
   try {
     const user = getUserFromRequest(req)
@@ -13,15 +14,68 @@ export async function GET(req: NextRequest) {
       )
     }
     
-    // Only librarians and admins can view all borrowings
-    if (user.role !== 'ADMIN' && user.role !== 'LIBRARIAN') {
-      return NextResponse.json(
-        { error: 'Only librarians and admins can view all borrowings' },
-        { status: 403 }
-      )
+    let borrowings
+    
+    if (user.role === 'PATRON') {
+      // Patrons can only see their own borrowings
+      borrowings = await prisma.borrowing.findMany({
+        where: {
+          userId: user.userId
+        },
+        include: {
+          book: {
+            select: {
+              id: true,
+              title: true,
+              author: true,
+              isbn: true
+            }
+          },
+          fines: {
+            select: {
+              id: true,
+              amount: true,
+              isPaid: true
+            }
+          }
+        },
+        orderBy: {
+          borrowedAt: 'desc'
+        }
+      })
+    } else {
+      // Librarians and admins can see all borrowings
+      borrowings = await prisma.borrowing.findMany({
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true
+            }
+          },
+          book: {
+            select: {
+              id: true,
+              title: true,
+              author: true,
+              isbn: true
+            }
+          },
+          fines: {
+            select: {
+              id: true,
+              amount: true,
+              isPaid: true
+            }
+          }
+        },
+        orderBy: {
+          borrowedAt: 'desc'
+        }
+      })
     }
     
-    const borrowings = await getActiveBorrowings()
     return NextResponse.json({ borrowings })
     
   } catch (error) {

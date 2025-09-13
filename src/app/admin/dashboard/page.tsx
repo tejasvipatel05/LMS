@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 
@@ -126,18 +127,26 @@ export default function AdminDashboard() {
         <Card className="p-6">
           <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
           <div className="space-y-3">
-            <Button className="w-full justify-start" variant="primary">
-              📚 Add New Book
-            </Button>
-            <Button className="w-full justify-start" variant="primary">
-              👤 Add New User
-            </Button>
-            <Button className="w-full justify-start" variant="primary">
-              📊 View Reports
-            </Button>
-            <Button className="w-full justify-start" variant="primary">
-              ⚙️ System Settings
-            </Button>
+            <Link href="/admin/books/add">
+              <Button className="w-full justify-start" variant="primary">
+                📚 Add New Book
+              </Button>
+            </Link>
+            <Link href="/admin/users/add">
+              <Button className="w-full justify-start" variant="primary">
+                👤 Add New User
+              </Button>
+            </Link>
+            <Link href="/admin/reports">
+              <Button className="w-full justify-start" variant="primary">
+                📊 View Reports
+              </Button>
+            </Link>
+            <Link href="/admin/settings">
+              <Button className="w-full justify-start" variant="primary">
+                ⚙️ System Settings
+              </Button>
+            </Link>
           </div>
         </Card>
 

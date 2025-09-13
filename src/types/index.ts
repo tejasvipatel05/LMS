@@ -7,6 +7,12 @@ export type BookStatus = 'AVAILABLE' | 'BORROWED' | 'RESERVED' | 'LOST' | 'DAMAG
 // Borrowing status
 export type BorrowStatus = 'ACTIVE' | 'RETURNED' | 'OVERDUE'
 
+// Reservation status
+export type ReservationStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'FULFILLED' | 'EXPIRED'
+
+// Reservation type
+export type ReservationType = 'REQUEST' | 'HOLD'
+
 // User interface - represents people using the library
 export interface User {
   id: string
@@ -63,14 +69,18 @@ export interface Fine {
   paidAt?: Date
 }
 
-// Reservation interface - for holding books
+// Reservation interface - for borrow requests and holding books
 export interface Reservation {
   id: string
   bookId: string
   userId: string
   reservedAt: Date
   expiresAt: Date
-  isActive: boolean
+  status: ReservationStatus
+  type: ReservationType
+  notes?: string
+  approvedBy?: string
+  approvedAt?: Date
 }
 
 // Simple search filters

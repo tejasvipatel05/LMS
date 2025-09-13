@@ -42,7 +42,7 @@ export async function createBook(data: {
   title: string
   author: string
   isbn: string
-  category: string
+  genre: string
   publisher?: string
   publishedYear?: number
   description?: string
@@ -68,7 +68,7 @@ export async function findBookByISBN(isbn: string) {
 export async function searchBooks(filters: {
   title?: string
   author?: string
-  category?: string
+  genre?: string
   status?: BookStatus
 }) {
   const where: any = {}
@@ -79,8 +79,8 @@ export async function searchBooks(filters: {
   if (filters.author) {
     where.author = { contains: filters.author, mode: 'insensitive' }
   }
-  if (filters.category) {
-    where.category = filters.category
+  if (filters.genre) {
+    where.genre = filters.genre
   }
   if (filters.status) {
     where.status = filters.status

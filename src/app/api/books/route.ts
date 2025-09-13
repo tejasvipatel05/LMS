@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
       books = await searchBooks({
         title: title || undefined,
         author: author || undefined,
-        category: category || undefined
+        genre: category || undefined
       })
     } else {
       // Otherwise get all books
