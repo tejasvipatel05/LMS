@@ -11,6 +11,7 @@ export async function POST(req: NextRequest) {
     // Basic validation
     if (!email || !password) {
       return NextResponse.json(
+        
         { error: 'Email and password are required' },
         { status: 400 }
       )
@@ -56,4 +57,11 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     )
   }
+}
+// Handle non-POST requests
+export async function GET() {
+  return NextResponse.json(
+    { error: 'Method not allowed. Use POST to login.' },
+    { status: 405 }
+  )
 }
