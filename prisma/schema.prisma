@@ -1,0 +1,103 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// User model - people using the library system
+model User {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String   @unique
+  password  String
+  name      String
+  role      String   // ADMIN, LIBRARIAN, PATRON
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  borrowings    Borrowing[]
+  fines         Fine[]
+  reservations  Reservation[]
+}
+
+// Book model - books in the library
+model Book {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  title           String
+  author          String
+  isbn            String   @unique
+  publisher       String?
+  publishedYear   Int?
+  category        String
+  description     String?
+  totalCopies     Int      @default(1)
+  availableCopies Int      @default(1)
+  status          String   // AVAILABLE, BORROWED, RESERVED, LOST, DAMAGED
+  location        String?  // shelf location
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  borrowings    Borrowing[]
+  reservations  Reservation[]
+}
+
+// Borrowing model - tracks book loas
+model Borrowing {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  bookId       String    @db.ObjectId
+  userId       String    @db.ObjectId
+  borrowedAt   DateTime  @default(now())
+  dueDate      DateTime
+  returnedAt   DateTime?
+  status       String    // ACTIVE, RETURNED, OVERDUE
+  fineAmount   Float?    @default(0)
+  renewalCount Int       @default(0)
+  notes        String?
+  
+  // Relations
+  book Book @relation(fields: [bookId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+  fines Fine[]
+}
+
+// Fine model - tracks overdue fines
+model Fine {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String    @db.ObjectId
+  borrowingId String    @db.ObjectId
+  amount      Float
+  isPaid      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  paidAt      DateTime?
+  
+  // Relations
+  user      User      @relation(fields: [userId], references: [id])
+  borrowing Borrowing @relation(fields: [borrowingId], references: [id])
+}
+
+// Reservation model - for holding books
+model Reservation {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  bookId     String   @db.ObjectId
+  userId     String   @db.ObjectId
+  reservedAt DateTime @default(now())
+  expiresAt  DateTime
+  isActive   Boolean  @default(true)
+  
+  // Relations
+  book Book @relation(fields: [bookId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+}
