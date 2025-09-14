@@ -61,7 +61,7 @@ export default function AdminLayout({
       <Header />
       <div className="flex">
         <AdminSidebar />
-        <main className="flex-1 p-8">
+        <main className="flex-1 p-8 pb-20">
           <div className="max-w-7xl mx-auto">
             {children}
           </div>

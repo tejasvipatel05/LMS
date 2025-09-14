@@ -114,8 +114,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       dataToUpdate.isbn = updateData.isbn
     }
     
-    if (updateData.genre) {
-      dataToUpdate.genre = updateData.genre
+    if (updateData.category) {
+      dataToUpdate.category = updateData.category
     }
     
     if (updateData.publishedYear !== undefined) {
@@ -195,7 +195,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     }
     
     // Check if book has active borrowings
-    const activeBorrowings = existingBook.borrowings.filter(b => !b.returnDate)
+    const activeBorrowings = existingBook.borrowings.filter(b => b.status === 'ACTIVE')
     if (activeBorrowings.length > 0) {
       return NextResponse.json(
         { error: 'Cannot delete book with active borrowings. Please return all copies first.' },
@@ -204,7 +204,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     }
     
     // Check if book has active reservations
-    const activeReservations = existingBook.reservations.filter(r => !r.fulfilledAt && new Date(r.expiryDate) > new Date())
+    const activeReservations = existingBook.reservations.filter(r => r.status === 'PENDING' || r.status === 'APPROVED')
     if (activeReservations.length > 0) {
       return NextResponse.json(
         { error: 'Cannot delete book with active reservations. Please cancel reservations first.' },

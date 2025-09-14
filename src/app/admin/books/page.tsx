@@ -10,7 +10,7 @@ interface Book {
   title: string
   author: string
   isbn: string
-  genre: string
+  category: string
   totalCopies: number
   availableCopies: number
   location: string
@@ -21,10 +21,24 @@ export default function BooksPage() {
   const [books, setBooks] = useState<Book[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+  const [searchLoading, setSearchLoading] = useState(false)
 
   useEffect(() => {
     fetchBooks()
   }, [])
+
+  // Debounced search effect
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchTerm.trim()) {
+        performSearch(searchTerm.trim())
+      } else {
+        fetchBooks()
+      }
+    }, 500)
+
+    return () => clearTimeout(timeoutId)
+  }, [searchTerm])
 
   const fetchBooks = async () => {
     try {
@@ -48,6 +62,34 @@ export default function BooksPage() {
     }
   }
 
+  const performSearch = async (query: string) => {
+    setSearchLoading(true)
+    try {
+      const token = localStorage.getItem('token')
+      // Use universal search query parameter
+      const searchParams = new URLSearchParams({
+        q: query
+      })
+      
+      const response = await fetch(`/api/books?${searchParams}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setBooks(data.books || [])
+      } else {
+        console.error('Failed to search books')
+      }
+    } catch (error) {
+      console.error('Error searching books:', error)
+    } finally {
+      setSearchLoading(false)
+    }
+  }
+
   const handleDeleteBook = async (bookId: string) => {
     if (!confirm('Are you sure you want to delete this book?')) return
     
@@ -63,7 +105,8 @@ export default function BooksPage() {
       if (response.ok) {
         setBooks(books.filter(book => book.id !== bookId))
       } else {
-        alert('Failed to delete book')
+        const error = await response.json()
+        alert(error.error || 'Failed to delete book')
       }
     } catch (error) {
       console.error('Error deleting book:', error)
@@ -71,12 +114,8 @@ export default function BooksPage() {
     }
   }
 
-  const filteredBooks = books.filter(book =>
-    book.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    book.author.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    book.isbn.includes(searchTerm) ||
-    book.genre.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  // Books are already filtered by the server-side search
+  const filteredBooks = books
 
   if (loading) {
     return (
@@ -104,19 +143,29 @@ export default function BooksPage() {
       {/* Search */}
       <Card className="p-4">
         <div className="flex items-center space-x-4">
-          <div className="flex-1">
+          <div className="flex-1 relative">
             <input
               type="text"
-              placeholder="Search books by title, author, ISBN, or genre..."
+              placeholder="Search books by title, author, ISBN, or category..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+              className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
             />
+            {searchLoading && (
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
+              </div>
+            )}
           </div>
-          <Button variant="secondary" onClick={fetchBooks}>
-            🔄 Refresh
+          <Button variant="secondary" onClick={() => { setSearchTerm(''); fetchBooks(); }}>
+            🔄 Clear & Refresh
           </Button>
         </div>
+        {searchTerm && (
+          <div className="mt-2 text-sm text-gray-600">
+            {searchLoading ? 'Searching...' : `Showing results for "${searchTerm}"`}
+          </div>
+        )}
       </Card>
 
       {/* Stats */}
@@ -155,7 +204,7 @@ export default function BooksPage() {
                   Book Details
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Genre
+                  Category
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Copies
@@ -188,7 +237,7 @@ export default function BooksPage() {
                     </td>
                     <td className="px-6 py-4">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        {book.genre}
+                        {book.category}
                       </span>
                     </td>
                     <td className="px-6 py-4">

@@ -44,7 +44,7 @@ export default function PatronSidebar() {
   }
 
   return (
-    <div className="w-64 bg-green-900 text-white min-h-screen">
+    <div className="w-64 bg-green-900 text-white min-h-screen relative">
       <div className="p-4">
         <div className="text-center mb-6">
           <div className="bg-green-600 text-white px-3 py-1 rounded-full text-sm font-medium">

@@ -30,6 +30,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         email: true,
         role: true,
         createdAt: true,
+        _count: {
+          select: {
+            borrowings: true,
+            fines: true,
+            reservations: true
+          }
+        },
         borrowings: {
           include: {
             book: {

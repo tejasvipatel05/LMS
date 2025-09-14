@@ -42,7 +42,7 @@ export async function createBook(data: {
   title: string
   author: string
   isbn: string
-  genre: string
+  category: string
   publisher?: string
   publishedYear?: number
   description?: string
@@ -51,10 +51,17 @@ export async function createBook(data: {
 }) {
   return await prisma.book.create({
     data: {
-      ...data,
-      status: 'AVAILABLE',
+      title: data.title,
+      author: data.author,
+      isbn: data.isbn,
+      category: data.category,
+      publisher: data.publisher,
+      publishedYear: data.publishedYear,
+      description: data.description,
       totalCopies: data.totalCopies || 1,
-      availableCopies: data.totalCopies || 1
+      availableCopies: data.totalCopies || 1,
+      location: data.location,
+      status: 'AVAILABLE'
     }
   })
 }
@@ -65,28 +72,68 @@ export async function findBookByISBN(isbn: string) {
   })
 }
 
-export async function searchBooks(filters: {
-  title?: string
-  author?: string
-  genre?: string
-  status?: BookStatus
-}) {
-  const where: any = {}
+// export async function searchBooks(filters: {
+//   title?: string
+//   author?: string
+//   category?: string
+//   status?: BookStatus
+// }) {
+//   const where: any = {}
   
-  if (filters.title) {
-    where.title = { contains: filters.title, mode: 'insensitive' }
-  }
-  if (filters.author) {
-    where.author = { contains: filters.author, mode: 'insensitive' }
-  }
-  if (filters.genre) {
-    where.genre = filters.genre
-  }
-  if (filters.status) {
-    where.status = filters.status
-  }
+//   if (filters.title) {
+//     where.title = { contains: filters.title, mode: 'insensitive' }
+//   }
+//   if (filters.author) {
+//     where.author = { contains: filters.author, mode: 'insensitive' }
+//   }
+//   if (filters.category) {
+//     where.category = { contains: filters.category, mode: 'insensitive' }
+//   }
+//   if (filters.status) {
+//     where.status = filters.status
+//   }
   
-  return await prisma.book.findMany({ where })
+//   return await prisma.book.findMany({ 
+//     where,
+//     orderBy: { createdAt: 'desc' }
+//   })
+// }
+
+export async function searchBooks({
+  title,
+  author,
+  category,
+}: {
+  title?: string;
+  author?: string;
+  category?: string;
+}) {    
+  return await prisma.book.findMany({
+    where: {
+      AND: [
+        title ? { title: { contains: title, mode: 'insensitive' } } : {},
+        author ? { author: { contains: author, mode: 'insensitive' } } : {},
+        category ? { category: { contains: category, mode: 'insensitive' } } : {},
+      ]
+    }
+  })
+}
+
+
+// Universal search function that searches across title, author, category, and ISBN
+export async function searchBooksUniversal(query: string) {
+  return await prisma.book.findMany({
+    where: {
+      OR: [
+        { title: { contains: query, mode: 'insensitive' } },
+        { author: { contains: query, mode: 'insensitive' } },
+        { category: { contains: query, mode: 'insensitive' } },
+        { isbn: { contains: query, mode: 'insensitive' } },
+        { description: { contains: query, mode: 'insensitive' } }
+      ]
+    },
+    orderBy: { createdAt: 'desc' }
+  })
 }
 
 export async function getAllBooks() {

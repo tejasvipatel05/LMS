@@ -52,7 +52,7 @@ export default function LibrarianSidebar() {
   }
 
   return (
-    <div className="w-64 bg-blue-900 text-white min-h-screen">
+    <div className="w-64 bg-blue-900 text-white min-h-screen relative">
       <div className="p-4">
         <div className="text-center mb-6">
           <div className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-medium">
