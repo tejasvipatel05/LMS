@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { Card } from '@/components/ui/Card'
+import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { Select } from '@/components/ui/Select'
 
 interface Book {
   id: string
@@ -26,7 +28,26 @@ export default function EditBookPage() {
   
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [book, setBook] = useState<Book | null>(null)
+  const [error, setError] = useState('')
+  const categories = [
+    'Fiction',
+    'Non-Fiction',
+    'Science',
+    'Technology',
+    'History',
+    'Biography',
+    'Self-Help',
+    'Reference',
+    'Textbook',
+    'Children',
+    'Young Adult',
+    'Poetry',
+    'Drama',
+    'Mystery',
+    'Science Fiction',
+    'Fantasy'
+  ] as const
+
   const [formData, setFormData] = useState({
     title: '',
     author: '',
@@ -38,88 +59,83 @@ export default function EditBookPage() {
     description: ''
   })
 
-  const categories = [
-    'Fiction', 'Non-Fiction', 'Science Fiction', 'Fantasy', 'Mystery', 'Romance',
-    'Thriller', 'Horror', 'Biography', 'History', 'Science', 'Technology',
-    'Business', 'Self-Help', 'Education', 'Children', 'Young Adult', 'Poetry'
-  ]
-
   useEffect(() => {
-    fetchBook()
-  }, [bookId])
-
-  const fetchBook = async () => {
-    try {
-      const token = localStorage.getItem('token')
-      const response = await fetch(`/api/books/${bookId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
+    const fetchBook = async () => {
+      if (!bookId) return
       
-      if (response.ok) {
-        const data = await response.json()
-        const bookData = data.book
-        setBook(bookData)
-        setFormData({
-          title: bookData.title || '',
-          author: bookData.author || '',
-          isbn: bookData.isbn || '',
-          category: bookData.category || '',
-          totalCopies: bookData.totalCopies || 1,
-          location: bookData.location || '',
-          publishedYear: bookData.publishedYear || new Date().getFullYear(),
-          description: bookData.description || ''
+      setLoading(true)
+      setError('')
+      
+      try {
+        const response = await fetch(`/api/books/${bookId}`, {
+          method: 'GET',
+          credentials: 'include',
+          // headers: {
+          //   'Content-Type': 'application/json',
+          //   'Accept': 'application/json'
+          // }
         })
-      } else {
-        alert('Failed to fetch book details')
+        
+        const data = await response.json()
+        
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to fetch book')
+        }
+        
+        setFormData({
+          title: data.title || '',
+          author: data.author || '',
+          isbn: data.isbn || '',
+          category: data.category || '',
+          totalCopies: data.totalCopies || 1,
+          location: data.location || '',
+          publishedYear: data.publishedYear || new Date().getFullYear(),
+          description: data.description || ''
+        })
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load book details')
         router.push('/admin/books')
+      } finally {
+        setLoading(false)
       }
-    } catch (error) {
-      console.error('Error fetching book:', error)
-      alert('Error fetching book details')
-      router.push('/admin/books')
-    } finally {
-      setLoading(false)
     }
-  }
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    fetchBook()
+  }, [bookId, router])
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'totalCopies' || name === 'publishedYear' ? parseInt(value) || 0 : value
+      [name]: name === 'totalCopies' || name === 'publishedYear' ? Number(value) || 0 : value
     }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
-
+    setError('')
+    
     try {
-      const token = localStorage.getItem('token')
       const response = await fetch(`/api/books/${bookId}`, {
         method: 'PUT',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Accept': 'application/json'
         },
-        body: JSON.stringify({
-          ...formData,
-          // Calculate available copies based on the difference in total copies
-          availableCopies: book ? book.availableCopies + (formData.totalCopies - book.totalCopies) : formData.totalCopies
-        })
+        body: JSON.stringify(formData)
       })
 
-      if (response.ok) {
-        router.push('/admin/books')
-      } else {
-        const error = await response.json()
-        alert(error.error || 'Failed to update book')
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to update book')
       }
-    } catch (error) {
-      console.error('Error updating book:', error)
-      alert('Error updating book')
+
+      router.push('/admin/books')
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update book')
     } finally {
       setSaving(false)
     }
@@ -127,226 +143,148 @@ export default function EditBookPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
-      </div>
-    )
-  }
-
-  if (!book) {
-    return (
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-gray-900 mb-4">Book Not Found</h1>
-        <Link href="/admin/books">
-          <Button variant="primary">← Back to Books</Button>
-        </Link>
+      <div className="p-4">
+        <Card>
+          <CardContent>
+            <div className="flex items-center justify-center h-32">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-900"></div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Edit Book</h1>
-          <p className="mt-2 text-gray-600">Update book information</p>
-        </div>
-        <Link href="/admin/books">
-          <Button variant="secondary">
-            ← Back to Books
-          </Button>
-        </Link>
-      </div>
+    <div className="p-4">
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold">Edit Book</h1>
+            <Button
+              variant="secondary"
+              onClick={() => router.push('/admin/books')}
+            >
+              Back to Books
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="bg-red-50 text-red-500 p-3 rounded-md">
+                {error}
+              </div>
+            )}
+            
+            <Input
+              label="Title"
+              name="title"
+              value={formData.title}
+              onChange={handleChange}
+              required
+            />
+            
+            <Input
+              label="Author"
+              name="author"
+              value={formData.author}
+              onChange={handleChange}
+              required
+            />
+            
+            <Input
+              label="ISBN"
+              name="isbn"
+              value={formData.isbn}
+              onChange={handleChange}
+              required
+            />
 
-      {/* Form */}
-      <Card className="p-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Title */}
-            <div>
-              <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
-                Title *
-              </label>
-              <input
-                type="text"
-                id="title"
-                name="title"
-                required
-                value={formData.title}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-                placeholder="Enter book title"
-              />
-            </div>
-
-            {/* Author */}
-            <div>
-              <label htmlFor="author" className="block text-sm font-medium text-gray-700 mb-2">
-                Author *
-              </label>
-              <input
-                type="text"
-                id="author"
-                name="author"
-                required
-                value={formData.author}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-                placeholder="Enter author name"
-              />
-            </div>
-
-            {/* ISBN */}
-            <div>
-              <label htmlFor="isbn" className="block text-sm font-medium text-gray-700 mb-2">
-                ISBN *
-              </label>
-              <input
-                type="text"
-                id="isbn"
-                name="isbn"
-                required
-                value={formData.isbn}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-                placeholder="Enter ISBN"
-              />
-            </div>
-
-            {/* Category */}
-            <div>
-              <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-2">
+            <div className="space-y-2">
+              <label htmlFor="category" className="block text-sm font-medium text-gray-700">
                 Category *
               </label>
-              <select
+              <Select
                 id="category"
                 name="category"
-                required
                 value={formData.category}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-              >
-                <option value="">Select Category</option>
-                {categories.map(category => (
-                  <option key={category} value={category}>{category}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Published Year */}
-            <div>
-              <label htmlFor="publishedYear" className="block text-sm font-medium text-gray-700 mb-2">
-                Published Year *
-              </label>
-              <input
-                type="number"
-                id="publishedYear"
-                name="publishedYear"
+                onChange={handleChange}
                 required
-                min="1000"
-                max={new Date().getFullYear()}
-                value={formData.publishedYear}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-                placeholder="Enter publication year"
+                options={[
+                  { value: '', label: 'Select a category' },
+                  ...categories.map(category => ({
+                    value: category,
+                    label: category
+                  }))
+                ]}
               />
             </div>
-
-            {/* Total Copies */}
-            <div>
-              <label htmlFor="totalCopies" className="block text-sm font-medium text-gray-700 mb-2">
-                Total Copies *
-              </label>
-              <input
-                type="number"
-                id="totalCopies"
-                name="totalCopies"
-                required
-                min="1"
-                value={formData.totalCopies}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-                placeholder="Enter number of copies"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Current available: {book.availableCopies} / {book.totalCopies}
-              </p>
-            </div>
-
-            {/* Location */}
-            <div className="md:col-span-2">
-              <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-2">
-                Location *
-              </label>
-              <input
-                type="text"
-                id="location"
-                name="location"
-                required
-                value={formData.location}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-                placeholder="Enter shelf/section location"
-              />
-            </div>
-
-            {/* Description */}
-            <div className="md:col-span-2">
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
+            <Input
+              label="Category"
+              name="category"
+              value={formData.category}
+              onChange={handleChange}
+              required
+            />
+            
+            <Input
+              label="Total Copies"
+              name="totalCopies"
+              type="number"
+              min="1"
+              value={formData.totalCopies}
+              onChange={handleChange}
+              required
+            />
+            
+            <Input
+              label="Location"
+              name="location"
+              value={formData.location}
+              onChange={handleChange}
+              required
+            />
+            
+            <Input
+              label="Published Year"
+              name="publishedYear"
+              type="number"
+              min="1000"
+              max={new Date().getFullYear()}
+              value={formData.publishedYear}
+              onChange={handleChange}
+              required
+            />
+            
+            <div className="space-y-1">
+              <label className="block text-sm font-medium text-gray-700">
                 Description
               </label>
               <textarea
-                id="description"
                 name="description"
-                rows={4}
                 value={formData.description}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-                placeholder="Enter book description (optional)"
+                onChange={handleChange}
+                rows={4}
+                className="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
               />
             </div>
-          </div>
 
-          {/* Form Actions */}
-          <div className="flex items-center justify-end space-x-4 pt-6 border-t">
-            <Link href="/admin/books">
-              <Button variant="secondary" type="button">
+            <div className="flex justify-end space-x-3 pt-4">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => router.back()}
+                disabled={saving}
+              >
                 Cancel
               </Button>
-            </Link>
-            <Button 
-              variant="primary" 
-              type="submit" 
-              disabled={saving}
-              className="min-w-32"
-            >
-              {saving ? (
-                <div className="flex items-center space-x-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  <span>Updating...</span>
-                </div>
-              ) : (
-                '📝 Update Book'
-              )}
-            </Button>
-          </div>
-        </form>
-      </Card>
-
-      {/* Warning */}
-      <Card className="p-4 bg-yellow-50 border-yellow-200">
-        <div className="flex">
-          <div className="text-yellow-600 mr-3">⚠️</div>
-          <div>
-            <h3 className="text-sm font-medium text-yellow-800 mb-1">Important Notes:</h3>
-            <ul className="text-sm text-yellow-700 space-y-1">
-              <li>• Changing the ISBN may affect borrowing records</li>
-              <li>• Reducing total copies below current borrowed copies is not recommended</li>
-              <li>• Location changes should be communicated to library staff</li>
-            </ul>
-          </div>
-        </div>
+              <Button type="submit" disabled={saving}>
+                {saving ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
       </Card>
     </div>
   )

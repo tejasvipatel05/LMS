@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { returnBook } from '@/lib/db-helpers'
 import { getUserFromRequest } from '@/middleware/auth'
+import { prisma } from '@/lib/database'
 
 // Return a book
 export async function POST(req: NextRequest) {
@@ -31,12 +31,77 @@ export async function POST(req: NextRequest) {
       )
     }
     
-    await returnBook(borrowingId)
-    
-    return NextResponse.json({
-      message: 'Book returned successfully'
+    const borrowing = await prisma.borrowing.findUnique({
+      where: { id: borrowingId },
+      include: {
+        book: true,
+        user: {
+          select: {
+            name: true,
+            email: true
+          }
+        }
+      }
     })
-    
+
+    if (!borrowing) {
+      return NextResponse.json(
+        { error: 'Borrowing record not found' },
+        { status: 404 }
+      )
+    }
+
+    if (borrowing.returnedAt) {
+      return NextResponse.json(
+        { error: 'Book has already been returned' },
+        { status: 400 }
+      )
+    }
+
+    // Calculate fine if book is overdue
+    const dueDate = borrowing.dueDate
+    const now = new Date()
+    let fine = null
+
+    if (dueDate < now) {
+      const daysOverdue = Math.ceil((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
+      const fineAmount = daysOverdue * 0.50 // $0.50 per day overdue
+
+      fine = await prisma.fine.create({
+        data: {
+          borrowingId: borrowing.id,
+          userId: borrowing.userId,
+          amount: fineAmount,
+          isPaid: false
+        }
+      })
+    }
+
+    // Return the book
+    const updatedBorrowing = await prisma.borrowing.update({
+      where: { id: borrowingId },
+      data: {
+        returnedAt: now,
+        status: 'RETURNED'
+      }
+    })
+
+    // Update book available copies
+    await prisma.book.update({
+      where: { id: borrowing.bookId },
+      data: {
+        availableCopies: {
+          increment: 1
+        }
+      }
+    })
+
+    return NextResponse.json({
+      message: 'Book returned successfully',
+      borrowing: updatedBorrowing,
+      fine: fine
+    })
+
   } catch (error) {
     console.error('Return book error:', error)
     

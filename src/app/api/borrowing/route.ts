@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { borrowBook, returnBook, getActiveBorrowings } from '@/lib/db-helpers'
 import { getUserFromRequest } from '@/middleware/auth'
 import { prisma } from '@/lib/database'
 
-// Get all borrowings (for librarians/admins)
 export async function GET(req: NextRequest) {
   try {
     const user = getUserFromRequest(req)
@@ -20,7 +18,8 @@ export async function GET(req: NextRequest) {
       // Patrons can only see their own borrowings
       borrowings = await prisma.borrowing.findMany({
         where: {
-          userId: user.userId
+          userId: user.id,
+          returnedAt: null // Only show active borrowings by default
         },
         include: {
           book: {
@@ -28,14 +27,20 @@ export async function GET(req: NextRequest) {
               id: true,
               title: true,
               author: true,
-              isbn: true
+              isbn: true,
+              availableCopies: true,
+              totalCopies: true
             }
           },
           fines: {
+            where: {
+              isPaid: false // Only show unpaid fines
+            },
             select: {
               id: true,
               amount: true,
-              isPaid: true
+              isPaid: true,
+              createdAt: true
             }
           }
         },
@@ -51,7 +56,8 @@ export async function GET(req: NextRequest) {
             select: {
               id: true,
               name: true,
-              email: true
+              email: true,
+              role: true
             }
           },
           book: {
@@ -59,14 +65,17 @@ export async function GET(req: NextRequest) {
               id: true,
               title: true,
               author: true,
-              isbn: true
+              isbn: true,
+              availableCopies: true,
+              totalCopies: true
             }
           },
           fines: {
             select: {
               id: true,
               amount: true,
-              isPaid: true
+              isPaid: true,
+              createdAt: true
             }
           }
         },
@@ -76,7 +85,7 @@ export async function GET(req: NextRequest) {
       })
     }
     
-    return NextResponse.json({ borrowings })
+    return NextResponse.json(borrowings)
     
   } catch (error) {
     console.error('Get borrowings error:', error)
@@ -87,7 +96,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// Borrow a book
+// Create a new borrowing
 export async function POST(req: NextRequest) {
   try {
     const user = getUserFromRequest(req)
@@ -97,51 +106,102 @@ export async function POST(req: NextRequest) {
         { status: 401 }
       )
     }
-    
+
     const { bookId, userId } = await req.json()
-    
-    // Basic validation
+
     if (!bookId) {
       return NextResponse.json(
         { error: 'Book ID is required' },
         { status: 400 }
       )
     }
-    
-    // If no userId provided, use current user's ID (for patrons)
-    const borrowerUserId = userId || user.userId
-    
-    // Only librarians/admins can borrow books for other users
-    if (userId && user.role !== 'ADMIN' && user.role !== 'LIBRARIAN') {
+
+    // Only librarians and admins can borrow books for others
+    const borrowerUserId = (user.role === 'ADMIN' || user.role === 'LIBRARIAN') && userId ? userId : user.id
+
+    // Check if user has active borrowings of this book
+    const existingBorrowing = await prisma.borrowing.findFirst({
+      where: {
+        bookId,
+        userId: borrowerUserId,
+        returnedAt: null
+      }
+    })
+
+    if (existingBorrowing) {
       return NextResponse.json(
-        { error: 'Only librarians and admins can borrow books for other users' },
-        { status: 403 }
-      )
-    }
-    
-    // Calculate due date (14 days from now)
-    const dueDate = new Date()
-    dueDate.setDate(dueDate.getDate() + 14)
-    
-    const borrowing = await borrowBook(bookId, borrowerUserId, dueDate)
-    
-    return NextResponse.json({
-      message: 'Book borrowed successfully',
-      borrowing
-    }, { status: 201 })
-    
-  } catch (error) {
-    console.error('Borrow book error:', error)
-    
-    if (error instanceof Error) {
-      return NextResponse.json(
-        { error: error.message },
+        { error: 'User already has an active borrowing for this book' },
         { status: 400 }
       )
     }
-    
+
+    // Check if book is available
+    const book = await prisma.book.findUnique({
+      where: { id: bookId }
+    })
+
+    if (!book) {
+      return NextResponse.json(
+        { error: 'Book not found' },
+        { status: 404 }
+      )
+    }
+
+    if (book.availableCopies < 1) {
+      return NextResponse.json(
+        { error: 'No copies available for borrowing' },
+        { status: 400 }
+      )
+    }
+
+    // Calculate due date (14 days from now)
+    const dueDate = new Date()
+    dueDate.setDate(dueDate.getDate() + 14)
+
+    // Create borrowing record and update book copies in a transaction
+    const [borrowing] = await prisma.$transaction([
+      prisma.borrowing.create({
+        data: {
+          userId: borrowerUserId,
+          bookId,
+          dueDate,
+          status: 'ACTIVE',
+          renewalCount: 0
+        },
+        include: {
+          book: {
+            select: {
+              title: true,
+              author: true
+            }
+          },
+          user: {
+            select: {
+              name: true,
+              email: true
+            }
+          }
+        }
+      }),
+      prisma.book.update({
+        where: { id: bookId },
+        data: {
+          availableCopies: {
+            decrement: 1
+          }
+        }
+      })
+    ])
+
+    return NextResponse.json({
+      message: 'Book borrowed successfully',
+      borrowing
+    })
+
+  } catch (error) {
+    console.error('Create borrowing error:', error)
     return NextResponse.json(
-      { error: 'Failed to borrow book' },
+      { error: 'Failed to create borrowing' },
       { status: 500 }
     )
   }

@@ -52,7 +52,7 @@ export function hasPermission(userRole: UserRole, action: string): boolean {
       'view_books', 'add_books', 'edit_books', 'delete_books',
       'view_users', 'add_users', 'edit_users',
       'issue_books', 'return_books',
-      'view_reports'
+      'view_reports','search_books','approve_reservations','reject_reservations'
     ],
     'PATRON': [
       'view_books', 'search_books',

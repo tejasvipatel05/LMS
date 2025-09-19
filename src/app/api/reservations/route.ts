@@ -7,6 +7,8 @@ import prisma from '@/lib/database'
 export const GET = requireAuth(async (req: NextRequest) => {
   try {
     const user = getUserFromRequest(req)
+    console.log("user in GET /api/reservations:", user);
+    
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -16,7 +18,7 @@ export const GET = requireAuth(async (req: NextRequest) => {
     if (user.role === 'PATRON') {
       // Patrons can only see their own reservations
       reservations = await prisma.reservation.findMany({
-        where: { userId: user.userId },
+        where: { userId: user.id },
         include: {
           book: {
             select: {
@@ -92,7 +94,7 @@ export const POST = requireAuth(async (req: NextRequest) => {
     // Check if user already has an active reservation for this book
     const existingReservation = await prisma.reservation.findFirst({
       where: {
-        userId: user.userId,
+        userId: user.id,
         bookId: bookId,
         status: { in: ['PENDING', 'APPROVED'] }
       }
@@ -108,7 +110,7 @@ export const POST = requireAuth(async (req: NextRequest) => {
     // Check if user already has this book borrowed
     const existingBorrowing = await prisma.borrowing.findFirst({
       where: {
-        userId: user.userId,
+        userId: user.id,
         bookId: bookId,
         status: 'ACTIVE'
       }
@@ -129,7 +131,7 @@ export const POST = requireAuth(async (req: NextRequest) => {
     const reservation = await prisma.reservation.create({
       data: {
         bookId,
-        userId: user.userId,
+        userId: user.id,
         expiresAt,
         status: 'PENDING',
         type: 'REQUEST',

@@ -49,7 +49,8 @@ export default function BorrowingPage() {
       
       if (response.ok) {
         const data = await response.json()
-        setBorrowings(data.borrowings || [])
+        
+        setBorrowings(data || [])
       } else {
         console.error('Failed to fetch borrowings')
       }
@@ -149,13 +150,15 @@ export default function BorrowingPage() {
 
     return true
   })
-
+  
   const stats = {
     total: borrowings.length,
     active: borrowings.filter(b => !b.returnDate).length,
     returned: borrowings.filter(b => !!b.returnDate).length,
     overdue: borrowings.filter(b => !b.returnDate && new Date(b.dueDate) < new Date()).length
   }
+
+  console.log(stats)
 
   if (loading) {
     return (

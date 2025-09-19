@@ -2,229 +2,169 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/middleware/auth'
 import { prisma } from '@/lib/database'
 
-// Get a specific book
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const book = await prisma.book.findUnique({
-      where: { id: params.id },
-      include: {
-        borrowings: {
-          include: {
-            user: {
-              select: {
-                name: true,
-                email: true
-              }
-            }
-          },
-          orderBy: { createdAt: 'desc' }
-        },
-        reservations: {
-          include: {
-            user: {
-              select: {
-                name: true,
-                email: true
-              }
-            }
-          },
-          orderBy: { createdAt: 'desc' }
-        }
-      }
-    })
+    const user = getUserFromRequest(request)
     
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const book = await prisma.book.findUnique({
+      where: { id: params.id }
+    })
+
     if (!book) {
       return NextResponse.json(
         { error: 'Book not found' },
         { status: 404 }
       )
     }
-    
-    return NextResponse.json({ book })
-    
+
+    return NextResponse.json(book)
   } catch (error) {
-    console.error('Get book error:', error)
+    console.error('Error fetching book:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch book' },
+      { error: 'Failed to fetch book details' },
       { status: 500 }
     )
   }
 }
 
-// Update a book (librarians and admins only)
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const user = getUserFromRequest(req)
-    if (!user) {
+    const user = getUserFromRequest(request)
+    if (!user || (user.role !== 'ADMIN' && user.role !== 'LIBRARIAN')) {
       return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      )
-    }
-    
-    // Only librarians and admins can update books
-    if (user.role !== 'ADMIN' && user.role !== 'LIBRARIAN') {
-      return NextResponse.json(
-        { error: 'Only librarians and admins can update books' },
+        { error: 'Unauthorized' },
         { status: 403 }
       )
     }
-    
-    const updateData = await req.json()
-    
-    // Check if book exists
-    const existingBook = await prisma.book.findUnique({
-      where: { id: params.id }
+
+    const data = await request.json()
+
+    // Validate required fields
+    if (!data.title?.trim()) {
+      return NextResponse.json(
+        { error: 'Title is required' },
+        { status: 400 }
+      )
+    }
+
+    if (!data.author?.trim()) {
+      return NextResponse.json(
+        { error: 'Author is required' },
+        { status: 400 }
+      )
+    }
+
+    if (!data.isbn?.trim()) {
+      return NextResponse.json(
+        { error: 'ISBN is required' },
+        { status: 400 }
+      )
+    }
+
+    if (!data.category?.trim()) {
+      return NextResponse.json(
+        { error: 'Category is required' },
+        { status: 400 }
+      )
+    }
+
+    // Validate numeric fields
+    if (!Number.isInteger(data.totalCopies) || data.totalCopies < 1) {
+      return NextResponse.json(
+        { error: 'Total copies must be a positive whole number' },
+        { status: 400 }
+      )
+    }
+
+    if (!Number.isInteger(data.publishedYear) || 
+        data.publishedYear < 1000 || 
+        data.publishedYear > new Date().getFullYear()) {
+      return NextResponse.json(
+        { error: 'Published year must be a valid year' },
+        { status: 400 }
+      )
+    }
+
+    // Check if ISBN is already taken by another book
+    const existingBook = await prisma.book.findFirst({
+      where: {
+        isbn: data.isbn,
+        id: { not: params.id }
+      }
     })
-    
-    if (!existingBook) {
+
+    if (existingBook) {
+      return NextResponse.json(
+        { error: 'ISBN is already in use by another book' },
+        { status: 400 }
+      )
+    }
+
+    // Get current book to check available copies
+    const currentBook = await prisma.book.findUnique({
+      where: { id: params.id },
+      select: { totalCopies: true, availableCopies: true }
+    })
+
+    if (!currentBook) {
       return NextResponse.json(
         { error: 'Book not found' },
         { status: 404 }
       )
     }
-    
-    // Prepare update data
-    const dataToUpdate: any = {}
-    
-    if (updateData.title) {
-      dataToUpdate.title = updateData.title
-    }
-    
-    if (updateData.author) {
-      dataToUpdate.author = updateData.author
-    }
-    
-    if (updateData.isbn) {
-      // Check if ISBN is already taken by another book
-      const isbnExists = await prisma.book.findFirst({
-        where: {
-          isbn: updateData.isbn,
-          id: { not: params.id }
-        }
-      })
-      
-      if (isbnExists) {
-        return NextResponse.json(
-          { error: 'ISBN already taken by another book' },
-          { status: 400 }
-        )
-      }
-      
-      dataToUpdate.isbn = updateData.isbn
-    }
-    
-    if (updateData.category) {
-      dataToUpdate.category = updateData.category
-    }
-    
-    if (updateData.publishedYear !== undefined) {
-      dataToUpdate.publishedYear = updateData.publishedYear
-    }
-    
-    if (updateData.totalCopies !== undefined) {
-      // Calculate new available copies based on the change in total copies
-      const currentBorrowed = existingBook.totalCopies - existingBook.availableCopies
-      const newAvailable = Math.max(0, updateData.totalCopies - currentBorrowed)
-      
-      dataToUpdate.totalCopies = updateData.totalCopies
-      dataToUpdate.availableCopies = newAvailable
-    }
-    
-    if (updateData.location) {
-      dataToUpdate.location = updateData.location
-    }
-    
-    if (updateData.description !== undefined) {
-      dataToUpdate.description = updateData.description
-    }
-    
+
+    // Calculate new available copies based on the change in total copies
+    const borrowedCopies = currentBook.totalCopies - currentBook.availableCopies
+    const newAvailableCopies = Math.max(0, data.totalCopies - borrowedCopies)
+
     // Update the book
     const updatedBook = await prisma.book.update({
       where: { id: params.id },
-      data: dataToUpdate
+      data: {
+        title: data.title,
+        author: data.author,
+        isbn: data.isbn,
+        category: data.category,
+        totalCopies: data.totalCopies,
+        availableCopies: newAvailableCopies,
+        location: data.location,
+        publishedYear: data.publishedYear,
+        description: data.description || null
+      }
     })
-    
+
     return NextResponse.json({
       message: 'Book updated successfully',
       book: updatedBook
     })
     
   } catch (error) {
-    console.error('Update book error:', error)
-    return NextResponse.json(
-      { error: 'Failed to update book' },
-      { status: 500 }
-    )
-  }
-}
-
-// Delete a book (librarians and admins only)
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  try {
-    const user = getUserFromRequest(req)
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      )
-    }
+    console.error('Error updating book:', error)
     
-    // Only librarians and admins can delete books
-    if (user.role !== 'ADMIN' && user.role !== 'LIBRARIAN') {
-      return NextResponse.json(
-        { error: 'Only librarians and admins can delete books' },
-        { status: 403 }
-      )
-    }
-    
-    // Check if book exists
-    const existingBook = await prisma.book.findUnique({
-      where: { id: params.id },
-      include: {
-        borrowings: true,
-        reservations: true
-      }
-    })
-    
-    if (!existingBook) {
+    // Handle Prisma errors
+    if ((error as any).code === 'P2025') {
       return NextResponse.json(
         { error: 'Book not found' },
         { status: 404 }
       )
     }
-    
-    // Check if book has active borrowings
-    const activeBorrowings = existingBook.borrowings.filter(b => b.status === 'ACTIVE')
-    if (activeBorrowings.length > 0) {
+
+    if ((error as any).code === 'P2002') {
       return NextResponse.json(
-        { error: 'Cannot delete book with active borrowings. Please return all copies first.' },
+        { error: 'ISBN must be unique' },
         { status: 400 }
       )
     }
-    
-    // Check if book has active reservations
-    const activeReservations = existingBook.reservations.filter(r => r.status === 'PENDING' || r.status === 'APPROVED')
-    if (activeReservations.length > 0) {
-      return NextResponse.json(
-        { error: 'Cannot delete book with active reservations. Please cancel reservations first.' },
-        { status: 400 }
-      )
-    }
-    
-    // Delete book (this will cascade delete related records due to database constraints)
-    await prisma.book.delete({
-      where: { id: params.id }
-    })
-    
-    return NextResponse.json({
-      message: 'Book deleted successfully'
-    })
-    
-  } catch (error) {
-    console.error('Delete book error:', error)
+
     return NextResponse.json(
-      { error: 'Failed to delete book' },
+      { error: 'Failed to update book' },
       { status: 500 }
     )
   }
